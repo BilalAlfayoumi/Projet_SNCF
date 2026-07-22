@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# uv
+.uv/
+
+# Secrets et configuration locale
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+
+# Donnees generees (corpus, checkpoints, index FAISS) : on garde les dossiers, pas le contenu
+data/raw/*
+!data/raw/.gitkeep
+data/checkpoints/*
+!data/checkpoints/.gitkeep
+data/index/*
+!data/index/.gitkeep
+
+# Outils et caches
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.DS_Store
+
+# Modeles telecharges (HuggingFace)
+.cache/
+CLAUDE.md
