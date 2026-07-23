@@ -67,7 +67,15 @@ def _get_agent(index_name: str, k: int) -> CompiledStateGraph:
 async def lifespan(app: FastAPI):
     # Precharge le modele d'embedding au demarrage pour que la 1re requete soit rapide.
     log.info("prechargement_embeddings")
-    get_embeddings()
+    emb = get_embeddings()
+    # ECHAUFFEMENT : la premiere inference paie l'initialisation torch (mesure en prod :
+    # 143 s sur 2 vCPU partages !). On l'absorbe ici, pendant le boot, pour que la
+    # premiere vraie question de l'utilisateur soit deja rapide.
+    import time
+
+    t0 = time.time()
+    emb.embed_query("echauffement du modele")
+    log.info("echauffement_embeddings_fini", duree_s=round(time.time() - t0, 1))
     # Prechauffe aussi le LLM local : charge le modele en GPU des maintenant (sinon la
     # premiere question paie le chargement, ~20-30 s avec Ollama).
     if settings.llm_provider == "ollama":

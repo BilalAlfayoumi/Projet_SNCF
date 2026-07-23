@@ -24,7 +24,9 @@ primary_region = "cdg"  # Paris : au plus pres des utilisateurs et des API SNCF
     path = "/health"
     interval = "30s"
     timeout = "10s"
-    grace_period = "90s"  # le chargement du modele e5 prend ~1 min au demarrage
+    # Chargement du modele e5 + echauffement de la premiere inference (mesure : ~2-3
+    # min sur 2 vCPU partages) : la grace period doit couvrir tout le boot.
+    grace_period = "300s"
 
 [[vm]]
   # e5-large a besoin de ~2,5-3 Go en pointe : 4 Go de marge, CPU partage (cout minimal)
