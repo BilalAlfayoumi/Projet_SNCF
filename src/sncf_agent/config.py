@@ -77,14 +77,28 @@ class Settings(BaseSettings):
     checkpoints_dir: Path = DATA_DIR / "checkpoints"
     index_dir: Path = DATA_DIR / "index"
 
+    # --- Vector store : FAISS (local) ou Qdrant (cloud) ---
+    # Backend basculable sans toucher au code (l'agent depend de vectorstore.py, pas
+    # d'une implementation). FAISS pour le dev offline, Qdrant pour la prod/scale.
+    vector_backend: str = Field(default="faiss", alias="VECTOR_BACKEND")  # faiss | qdrant
+    qdrant_url: str = Field(default="", alias="QDRANT_CLUSTER_ENDPOINT")
+    qdrant_api_key: str = Field(default="", alias="QDRANT_API_KEY")
+
     # --- Retrieval (agent) ---
     retrieval_k: int = 4  # nombre de passages recuperes par requete
-    # Seuil de pertinence (distance L2, FAISS + e5 normalise : plus petit = plus proche).
-    # Mesure sur les 3 corpus : pertinent <= 0.253, hors-sujet >= 0.391. Un passage
-    # au-dela du seuil n'est pas transmis a l'agent, qui peut alors refuser honnetement.
-    # NB : a recalibrer si on change d'embedding, et a convertir si on passe a Qdrant
-    # (qui renvoie une similarite cosinus, plus grand = plus proche).
-    retrieval_score_threshold: float = 0.35
+    # Seuil de pertinence. ATTENTION : la metrique differe selon le backend.
+    # - FAISS : distance L2 (plus PETIT = plus proche). Mesure : pertinent <= 0.25,
+    #   hors-sujet >= 0.39. On garde un passage si score <= seuil.
+    # - Qdrant : similarite cosinus (plus GRAND = plus proche). On garde si score >= seuil.
+    # Les deux seuils sont calibres separement sur les 3 corpus.
+    retrieval_score_threshold: float = 0.35  # FAISS (L2)
+    # Qdrant (cosinus) : mesure sur les 3 corpus -> pertinent >= 0.874, hors-sujet
+    # <= 0.804. Seuil au milieu, marge des deux cotes. On garde si score >= seuil.
+    qdrant_score_threshold: float = 0.84
+
+    @property
+    def is_qdrant(self) -> bool:
+        return self.vector_backend.lower() == "qdrant"
 
     # --- LLM d'evaluation (RAGAS) ---
     # L'eval est gourmande en tokens (juge appele plusieurs fois par question). On la

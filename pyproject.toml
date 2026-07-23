@@ -34,6 +34,8 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "pypdf>=6.14.2",
     "logfire[fastapi,system-metrics]>=4.38.0",
+    "langchain-qdrant>=1.1.0",
+    "qdrant-client>=1.18.0",
 ]
 
 [project.optional-dependencies]

@@ -86,11 +86,24 @@ def index_dir(name: str) -> Path:
 
 
 def list_indexes() -> list[str]:
-    """Liste les index FAISS disponibles sur disque."""
+    """Liste les index/collections disponibles, selon le backend vectoriel actif."""
+    if settings.is_qdrant:
+        from sncf_agent.ingestion.qdrant_store import list_collections
+
+        return list_collections()
     settings.ensure_data_dirs()
     return sorted(
         p.name for p in settings.index_dir.iterdir() if p.is_dir() and (p / "index.faiss").exists()
     )
+
+
+def build_index(chunks: list[Chunk], name: str, embeddings: Embeddings | None = None) -> str:
+    """Construit l'index/collection selon le backend actif (FAISS local ou Qdrant)."""
+    if settings.is_qdrant:
+        from sncf_agent.ingestion.qdrant_store import build_qdrant
+
+        return build_qdrant(chunks, name, embeddings=embeddings)
+    return str(build_faiss(chunks, name, embeddings=embeddings))
 
 
 def build_faiss(chunks: list[Chunk], name: str, embeddings: Embeddings | None = None) -> Path:

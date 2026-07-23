@@ -18,7 +18,7 @@ import structlog
 
 from sncf_agent.ingestion.checkpoint import load_chunks, save_chunks
 from sncf_agent.ingestion.chunking import chunk_passages
-from sncf_agent.ingestion.embedding import build_faiss
+from sncf_agent.ingestion.embedding import build_index
 from sncf_agent.ingestion.parsing import to_passage
 from sncf_agent.ingestion.sources import OpenDataConnector
 
@@ -51,7 +51,7 @@ def ingest_dataset(
         save_chunks(chunks, dataset_id)
 
     if embed:
-        build_faiss(chunks, dataset_id)
+        build_index(chunks, dataset_id)
         log.info("ingestion_complete", dataset=dataset_id, n_chunks=len(chunks))
 
 

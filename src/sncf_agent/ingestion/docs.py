@@ -26,7 +26,7 @@ from bs4 import BeautifulSoup
 from sncf_agent.config import settings
 from sncf_agent.ingestion.checkpoint import save_chunks
 from sncf_agent.ingestion.chunking import chunk_passages
-from sncf_agent.ingestion.embedding import build_faiss
+from sncf_agent.ingestion.embedding import build_index
 from sncf_agent.ingestion.parsing import Passage
 
 log = structlog.get_logger(__name__)
@@ -123,7 +123,7 @@ def ingest_docs(corpus: str, embed: bool = True) -> None:
     save_chunks(chunks, corpus)
 
     if embed:
-        build_faiss(chunks, corpus)
+        build_index(chunks, corpus)
         log.info("ingestion_docs_complete", corpus=corpus, n_chunks=len(chunks))
 
 

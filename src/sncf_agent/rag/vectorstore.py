@@ -1,10 +1,14 @@
-"""Acces au vector store, isole derriere une seule fonction.
+"""Acces au vector store, isole derriere une seule fonction : LE point de bascule
+FAISS <-> Qdrant.
 
-C'est LE point de bascule FAISS -> Qdrant. L'agent depend de l'interface retriever de
-LangChain (VectorStoreRetriever), jamais de FAISS directement. En Semaine 6 (version
-scalable), on remplace le contenu de get_vectorstore() par un QdrantVectorStore : le
-reste du code (retriever, agent) ne change pas, car les deux implementent la meme
-interface VectorStore de LangChain.
+L'agent depend de l'interface retriever de LangChain, jamais d'une implementation. Le
+backend est choisi par settings.vector_backend (VECTOR_BACKEND) : FAISS local pour le
+dev offline, Qdrant Cloud pour la prod/scale. Changer de backend ne touche ni le
+retriever, ni l'agent, ni les guardrails.
+
+Semantique des scores (gere par search_relevant / est_pertinent) :
+- FAISS  : distance L2, plus PETIT = plus proche (garde si score <= seuil L2).
+- Qdrant : similarite cosinus, plus GRAND = plus proche (garde si score >= seuil cos).
 """
 
 from __future__ import annotations
@@ -12,15 +16,17 @@ from __future__ import annotations
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
 
-from sncf_agent.ingestion.embedding import load_faiss
+from sncf_agent.config import settings
 
 
 def get_vectorstore(name: str, embeddings: Embeddings | None = None) -> VectorStore:
-    """Renvoie le vector store pour un index donne.
+    """Renvoie le vector store pour un index/collection, selon le backend configure."""
+    if settings.is_qdrant:
+        from sncf_agent.ingestion.qdrant_store import load_qdrant
 
-    Prototype : FAISS local. Version scalable (Semaine 6) : remplacer par Qdrant ici,
-    sans toucher au retriever ni a l'agent.
-    """
+        return load_qdrant(name, embeddings=embeddings)
+    from sncf_agent.ingestion.embedding import load_faiss
+
     return load_faiss(name, embeddings=embeddings)
 
 
@@ -34,23 +40,26 @@ def get_retriever(
     return store.as_retriever(search_kwargs={"k": k})
 
 
+def est_pertinent(score: float) -> bool:
+    """Vrai si un passage est assez proche pour etre transmis a l'agent, selon le sens
+    du score du backend actif (L2 pour FAISS, cosinus pour Qdrant)."""
+    if settings.is_qdrant:
+        return score >= settings.qdrant_score_threshold
+    return score <= settings.retrieval_score_threshold
+
+
 def search_relevant(
     name: str,
     query: str,
     k: int = 4,
-    threshold: float | None = None,
     embeddings: Embeddings | None = None,
 ):
-    """Recherche filtree par seuil de pertinence : ne renvoie que les documents dont la
-    distance L2 est sous le seuil. Liste vide si rien n'est assez proche, ce qui permet
-    a l'agent de refuser honnetement au lieu de raisonner sur du hors-sujet.
-    """
-    from sncf_agent.config import settings
-
-    seuil = threshold if threshold is not None else settings.retrieval_score_threshold
+    """Recherche filtree par le seuil de pertinence du backend actif. Liste vide si rien
+    n'est assez proche, ce qui permet a l'agent de refuser honnetement plutot que de
+    raisonner sur du hors-sujet."""
     store = get_vectorstore(name, embeddings=embeddings)
     results = store.similarity_search_with_score(query, k=k)
-    return [doc for doc, score in results if float(score) <= seuil]
+    return [doc for doc, score in results if est_pertinent(float(score))]
 
 
 def search_with_scores(
@@ -61,8 +70,7 @@ def search_with_scores(
 ) -> list[tuple[str, str, float]]:
     """Recherche brute avec scores, pour inspecter la qualite du retrieval.
 
-    Renvoie une liste de (texte, source, score). Le score FAISS est une distance L2 :
-    plus il est PETIT, plus le passage est proche de la requete.
+    Renvoie (texte, source, score). Sens du score selon le backend (voir en-tete).
     """
     store = get_vectorstore(name, embeddings=embeddings)
     results = store.similarity_search_with_score(query, k=k)
