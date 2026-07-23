@@ -215,21 +215,34 @@ _MSG_LIMITE_ITERATIONS = (
 )
 
 
-def _invoke(agent: CompiledStateGraph, question: str) -> dict:
+def _invoke(
+    agent: CompiledStateGraph,
+    question: str,
+    history: list[dict] | None = None,
+) -> dict:
+    """Invoque l'agent avec la question, precedee de l'historique de conversation.
+
+    Memoire courte STATELESS : l'historique vient du client a chaque requete (pas de
+    checkpointer serveur). Choix delibere pour l'infra scale-to-zero : la conversation
+    survit aux redemarrages de machine puisque c'est le client qui la detient. Le
+    checkpointer LangGraph (thread_id + store persistant) est l'evolution prevue pour
+    la version scalable.
+    """
     from langgraph.errors import GraphRecursionError
 
+    messages = [*(history or []), {"role": "user", "content": question}]
     try:
         return agent.invoke(
-            {"messages": [{"role": "user", "content": question}]},
+            {"messages": messages},
             config={"recursion_limit": _RECURSION_LIMIT},
         )
     except GraphRecursionError:
         return {"messages": []}
 
 
-def ask(agent: CompiledStateGraph, question: str) -> str:
-    """Pose une question a l'agent et renvoie sa reponse texte."""
-    result = _invoke(agent, question)
+def ask(agent: CompiledStateGraph, question: str, history: list[dict] | None = None) -> str:
+    """Pose une question a l'agent (avec l'historique eventuel) et renvoie sa reponse."""
+    result = _invoke(agent, question, history=history)
     if not result["messages"]:
         return _MSG_LIMITE_ITERATIONS
     return result["messages"][-1].content

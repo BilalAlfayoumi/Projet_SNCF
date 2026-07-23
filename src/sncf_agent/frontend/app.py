@@ -37,8 +37,18 @@ def fetch_indexes() -> list[str]:
         return []
 
 
-def call_chat(question: str, index: str, k: int, provider: str = "", api_key: str = "") -> str:
+def call_chat(
+    question: str,
+    index: str,
+    k: int,
+    provider: str = "",
+    api_key: str = "",
+    history: list[dict] | None = None,
+) -> str:
     payload: dict = {"question": question, "index": index, "k": k}
+    # Memoire courte : les derniers echanges partent avec la requete (serveur stateless).
+    if history:
+        payload["history"] = history
     # BYOK : la cle du visiteur part avec la requete, elle n'est jamais stockee.
     if provider and api_key:
         payload["provider"] = provider.lower()
@@ -46,6 +56,16 @@ def call_chat(question: str, index: str, k: int, provider: str = "", api_key: st
     resp = httpx.post(f"{BACKEND_URL}/chat", json=payload, timeout=TIMEOUT)
     resp.raise_for_status()
     return resp.json()["answer"]
+
+
+def build_history(messages: list[dict], limite: int = 8) -> list[dict]:
+    """Derniers echanges a envoyer au backend, sans les messages d'erreur."""
+    propres = [
+        {"role": m["role"], "content": m["content"][:4000]}
+        for m in messages
+        if m.get("content") and not str(m["content"]).startswith("Erreur backend")
+    ]
+    return propres[-limite:]
 
 
 def call_search(query: str, index: str, k: int) -> list[dict]:
@@ -113,6 +133,8 @@ with tab_chat:
             st.markdown(msg["content"])
 
     if question := st.chat_input("Posez une question sur la SNCF..."):
+        # Historique AVANT d'ajouter la nouvelle question (elle part via `question`)
+        historique = build_history(st.session_state.messages)
         st.session_state.messages.append({"role": "user", "content": question})
         with st.chat_message("user"):
             st.markdown(question)
@@ -120,7 +142,9 @@ with tab_chat:
             with st.spinner("L'agent reflechit..."):
                 try:
                     fournisseur_actif = "" if fournisseur == "Defaut serveur" else fournisseur
-                    answer = call_chat(question, index, k, fournisseur_actif, api_key)
+                    answer = call_chat(
+                        question, index, k, fournisseur_actif, api_key, historique
+                    )
                 except httpx.HTTPStatusError as e:
                     detail = ""
                     try:

@@ -110,11 +110,19 @@ logfire.instrument_system_metrics()
 _BYOK_MODELS = {"groq": "llama-3.3-70b-versatile", "openai": "gpt-4o-mini"}
 
 
+class ChatMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class ChatRequest(BaseModel):
     # Guardrail : borne la taille de la question (anti-saturation du contexte).
     question: str = Field(min_length=1, max_length=1000)
     index: str
     k: int = Field(default=settings.retrieval_k, ge=1, le=20)
+    # Memoire courte : les derniers echanges, envoyes par le client a chaque requete
+    # (serveur stateless, coherent avec le scale-to-zero). Plafonne a 8 messages.
+    history: list[ChatMessage] = Field(default_factory=list, max_length=8)
     # BYOK : le visiteur fournit SA cle API (demo publique sans facturer le serveur).
     # La cle transite par requete, n'est ni stockee, ni loguee, ni mise en cache.
     provider: str | None = Field(default=None, pattern="^(groq|openai)$")
@@ -205,8 +213,9 @@ def chat(req: ChatRequest) -> ChatResponse:
                 )
             )
         agent = _get_agent(req.index, req.k)
+    historique = [{"role": m.role, "content": m.content} for m in req.history]
     try:
-        answer = ask(agent, req.question)
+        answer = ask(agent, req.question, history=historique)
     except Exception as exc:  # noqa: BLE001
         msg = str(exc)
         # Cle API invalide (mode BYOK notamment) : erreur explicite pour l'utilisateur.
