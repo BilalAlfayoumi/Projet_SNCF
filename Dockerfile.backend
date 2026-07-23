@@ -11,13 +11,17 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
-# 1. Dependances d'abord (couche cachee tant que pyproject/uv.lock ne changent pas)
+# 1. Dependances d'abord (couche cachee tant que pyproject/uv.lock ne changent pas).
+#    --mount=type=cache : le cache uv (~1,5 Go) reste hors de l'image finale.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev
 
-# 2. Code puis installation du projet lui-meme
+# 2. Code puis installation du projet lui-meme (hatchling exige le README declare)
+COPY README.md ./
 COPY src ./src
-RUN uv sync --frozen --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
 # 3. Index FAISS construits en local (petits : ~15 Mo), embarques dans l'image.
 #    Pour mettre a jour le corpus en prod : re-ingerer en local puis redeployer.
