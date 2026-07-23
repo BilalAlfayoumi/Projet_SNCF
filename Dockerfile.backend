@@ -23,17 +23,19 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# 3. Index FAISS construits en local (petits : ~15 Mo), embarques dans l'image.
-#    Pour mettre a jour le corpus en prod : re-ingerer en local puis redeployer.
-COPY data/index ./data/index
+# 3. Le corpus vit dans Qdrant Cloud (VECTOR_BACKEND=qdrant en prod) : l'image
+#    n'embarque PAS les index FAISS. Pour tourner en FAISS, monter data/index.
 
 # 4. Pre-telechargement du modele d'embedding dans l'image (~2,2 Go) : le demarrage
-#    du conteneur ne depend plus du reseau HuggingFace.
+#    du conteneur ne depend plus du reseau HuggingFace. Necessaire meme avec Qdrant
+#    (on embedde toujours les requetes en local pour interroger la collection).
 ENV HF_HOME=/app/.hf-cache
 RUN uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('intfloat/multilingual-e5-large', device='cpu')"
 
-# En prod : LLM via API (pas d'Ollama dans le conteneur). Surcharge par Fly secrets.
-ENV LLM_PROVIDER=groq \
+# En prod : backend vectoriel Qdrant + LLM via API. Secrets (QDRANT_*, cles LLM)
+# poses par Fly. Surchargeable.
+ENV VECTOR_BACKEND=qdrant \
+    LLM_PROVIDER=groq \
     LLM_MODEL=llama-3.3-70b-versatile
 
 EXPOSE 8000
