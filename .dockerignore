@@ -1,0 +1,27 @@
+# Jamais dans une image : secrets et credentials
+.env
+.env.*
+.logfire/
+
+# Environnements et caches
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+.hf-cache/
+
+# Donnees volumineuses NON necessaires a l'image (les index data/index/ SONT copies)
+data/raw/
+data/checkpoints/
+
+# Dev et outillage
+.git/
+.github/
+.claude/
+tests/
+eval/results/
+*.log
+Makefile
+plan-projet-sncf.md
+CLAUDE.md

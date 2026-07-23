@@ -1,0 +1,36 @@
+# Backend FastAPI de l'agent RAG SNCF.
+# L'image embarque : les dependances (torch CPU-only via l'index pytorch-cpu), les
+# index FAISS construits en local, et le modele d'embedding e5 pre-telecharge (cold
+# start rapide). Le LLM est appele via API (Groq par defaut en prod, cf. LLM_PROVIDER).
+
+FROM python:3.12-slim
+
+# uv : gestionnaire de dependances (meme outil qu'en dev)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+
+# 1. Dependances d'abord (couche cachee tant que pyproject/uv.lock ne changent pas)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
+
+# 2. Code puis installation du projet lui-meme
+COPY src ./src
+RUN uv sync --frozen --no-dev
+
+# 3. Index FAISS construits en local (petits : ~15 Mo), embarques dans l'image.
+#    Pour mettre a jour le corpus en prod : re-ingerer en local puis redeployer.
+COPY data/index ./data/index
+
+# 4. Pre-telechargement du modele d'embedding dans l'image (~2,2 Go) : le demarrage
+#    du conteneur ne depend plus du reseau HuggingFace.
+ENV HF_HOME=/app/.hf-cache
+RUN uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('intfloat/multilingual-e5-large', device='cpu')"
+
+# En prod : LLM via API (pas d'Ollama dans le conteneur). Surcharge par Fly secrets.
+ENV LLM_PROVIDER=groq \
+    LLM_MODEL=llama-3.3-70b-versatile
+
+EXPOSE 8000
+CMD ["uv", "run", "--no-sync", "uvicorn", "sncf_agent.backend.app:app", "--host", "0.0.0.0", "--port", "8000"]

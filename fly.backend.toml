@@ -1,0 +1,33 @@
+# Fly.io : backend FastAPI de l'agent RAG SNCF.
+# Deploiement : fly deploy -c fly.backend.toml
+# Secrets a definir avant le 1er deploiement (fly secrets set -c fly.backend.toml ...) :
+#   GROQ_API_KEY          (optionnel : LLM "defaut serveur" ; sinon BYOK uniquement)
+#   LANGSMITH_API_KEY / LANGSMITH_TRACING / LANGSMITH_ENDPOINT / LANGSMITH_PROJECT
+#   PYDANTIC_LOGFIRE_API_KEY  (observabilite applicative)
+
+app = "sncf-agent-backend"
+primary_region = "cdg"  # Paris : au plus pres des utilisateurs et des API SNCF
+
+[build]
+  dockerfile = "Dockerfile.backend"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Scale-to-zero : la machine s'arrete sans trafic (cout quasi nul au repos) et
+  # redemarre a la premiere requete (~1 min de reveil : chargement du modele e5).
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    path = "/health"
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "90s"  # le chargement du modele e5 prend ~1 min au demarrage
+
+[[vm]]
+  # e5-large a besoin de ~2,5-3 Go en pointe : 4 Go de marge, CPU partage (cout minimal)
+  memory = "4gb"
+  cpu_kind = "shared"
+  cpus = 2

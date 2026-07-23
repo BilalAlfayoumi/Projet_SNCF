@@ -1,0 +1,152 @@
+{
+  "description": "Golden set d'evaluation de l'agent RAG SNCF multi-corpus (regularite TGV, tarifs Intercites, regles MAX JEUNE). A relire et enrichir par Bilal. Chaque entree : question, reference (reponse ideale), category. Les in_domain_* testent chaque corpus ET le routage de l'agent ; les out_of_domain_* testent le comportement de refus.",
+  "version": "0.3",
+  "index": "multi",
+  "items": [
+    {
+      "question": "Combien coute un billet Intercites de Agen a Montpellier en 2e classe ?",
+      "reference": "En 2e classe, place assise, tarif normal, le billet Intercites Agen - Montpellier va d'environ 19 a 55 euros selon les periodes.",
+      "category": "in_domain_tarifs"
+    },
+    {
+      "question": "Quel est le prix en premiere classe d'un Intercites entre Agen et Montpellier ?",
+      "reference": "Le prix en premiere classe est superieur a celui de la 2e classe ; la grille tarifaire indique un prix minimum et un prix maximum pour ce trajet.",
+      "category": "in_domain_tarifs"
+    },
+    {
+      "question": "Quels types de places et profils tarifaires existent pour les billets Intercites ?",
+      "reference": "Les grilles tarifaires Intercites distinguent la classe (1re ou 2e), le type de place (par exemple assise) et le profil tarifaire (par exemple Tarif Normal).",
+      "category": "in_domain_tarifs"
+    },
+    {
+      "question": "Jusqu'a quel age peut-on beneficier de l'abonnement MAX JEUNE ?",
+      "reference": "L'abonnement MAX JEUNE s'adresse aux jeunes de 16 a 27 ans. Il reste effectif jusqu'au onzieme mois des 27 ans, puis est resilie automatiquement et sans frais le mois du 28e anniversaire.",
+      "category": "in_domain_max_jeune"
+    },
+    {
+      "question": "Combien de reservations simultanees sont possibles avec l'abonnement MAX JEUNE ?",
+      "reference": "L'abonnement MAX JEUNE permet de bloquer jusqu'a 6 reservations ou trajets en meme temps.",
+      "category": "in_domain_max_jeune"
+    },
+    {
+      "question": "Que faut-il presenter lors du controle a bord avec un billet MAX JEUNE ?",
+      "reference": "Lors du controle a bord, il faut presenter son e-billet et sa piece d'identite.",
+      "category": "in_domain_max_jeune"
+    },
+    {
+      "question": "Quel est le prix d'un billet Intercites Agen-Montpellier et jusqu'a quel age l'abonnement MAX JEUNE est-il valable ?",
+      "reference": "Deux informations distinctes : le billet Intercites Agen - Montpellier en 2e classe va d'environ 19 a 55 euros, et l'abonnement MAX JEUNE est valable de 16 a 27 ans (resiliation automatique au mois du 28e anniversaire). L'agent doit consulter les deux corpus.",
+      "category": "in_domain_multi"
+    },
+    {
+      "question": "Quelle est la regularite des TGV entre Paris Montparnasse et Bordeaux ?",
+      "reference": "Les donnees de regularite mensuelle indiquent le nombre de trains prevus, les annulations et le retard moyen a l'arrivee pour la liaison Paris Montparnasse - Bordeaux St Jean sur differentes periodes.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Quel est le retard moyen a l'arrivee des TGV entre Paris Lyon et Marseille ?",
+      "reference": "Le retard moyen a l'arrivee des trains en retard sur la liaison Paris Gare de Lyon - Marseille St Charles est fourni en minutes par periode mensuelle.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Combien de trains etaient prevus entre Paris et Strasbourg ?",
+      "reference": "Le nombre de trains prevus sur la liaison vers Strasbourg est renseigne par periode mensuelle dans les donnees de regularite.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Y a-t-il eu beaucoup d'annulations sur la ligne Paris - Lille ?",
+      "reference": "Les donnees indiquent le nombre d'annulations par periode sur la liaison vers Lille.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Quelle est la ponctualite des TGV entre Paris Montparnasse et Rennes ?",
+      "reference": "La ponctualite de la liaison Paris Montparnasse - Rennes s'apprecie via le retard moyen a l'arrivee et le nombre de trains en retard par periode mensuelle.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Quel est le retard moyen des trains au depart de Bordeaux vers Paris ?",
+      "reference": "Le retard moyen a l'arrivee des trains de la liaison Bordeaux St Jean - Paris Montparnasse est fourni en minutes par periode mensuelle.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Combien de trains circulaient entre Paris et Nantes ?",
+      "reference": "Le nombre de trains prevus sur la liaison Paris Montparnasse - Nantes est indique par periode mensuelle.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Quelles sont les principales causes de retard des TGV vers Marseille ?",
+      "reference": "Les causes de retard sont ventilees en pourcentages : cause externe, infrastructure, gestion du trafic, materiel roulant, gestion en gare et reutilisation de materiel, prise en charge des voyageurs.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Combien de trains ont eu plus de 15 minutes de retard entre Paris et Lyon ?",
+      "reference": "Le nombre de trains ayant accuse un retard superieur a 15 minutes a l'arrivee est renseigne par periode sur la liaison Paris Gare de Lyon - Lyon.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "La ponctualite entre Paris et Strasbourg s'est-elle amelioree au fil du temps ?",
+      "reference": "En comparant le retard moyen a l'arrivee sur plusieurs periodes mensuelles, on peut apprecier l'evolution de la ponctualite de la liaison vers Strasbourg.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Quel etait le retard moyen des TGV entre Paris Montparnasse et Le Mans ?",
+      "reference": "Le retard moyen a l'arrivee sur la liaison Paris Montparnasse - Le Mans est renseigne par periode mensuelle.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Combien de trains etaient prevus vers Quimper au depart de Paris Montparnasse ?",
+      "reference": "Le nombre de trains prevus vers Quimper est indique par periode mensuelle dans les donnees de regularite.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Quel est le taux d'annulation des TGV entre Paris et Marseille ?",
+      "reference": "Le taux d'annulation se deduit du nombre d'annulations rapporte au nombre de trains prevus sur la liaison vers Marseille, par periode.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Y a-t-il des donnees de regularite pour les TGV vers Lille ?",
+      "reference": "Oui, les donnees de regularite mensuelle couvrent les liaisons vers Lille (trains prevus, annulations, retards).",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Quelle est la duree moyenne d'un trajet Paris - Bordeaux en TGV ?",
+      "reference": "La duree moyenne du trajet est renseignee dans les donnees de regularite pour la liaison Paris Montparnasse - Bordeaux St Jean.",
+      "category": "in_domain_regularite"
+    },
+    {
+      "question": "Comment aller de Bordeaux a Lyon en train ?",
+      "reference": "Cette question concerne un itineraire (routing) en temps reel, qui n'est pas couvert par les donnees de regularite mensuelle. L'agent doit indiquer qu'il n'a pas cette information dans ses donnees.",
+      "category": "out_of_domain_routing"
+    },
+    {
+      "question": "A quelle heure part le prochain train pour Marseille ?",
+      "reference": "Cette question porte sur les horaires en temps reel, non couverts par les donnees de regularite. L'agent doit indiquer qu'il n'a pas cette information.",
+      "category": "out_of_domain_realtime"
+    },
+    {
+      "question": "Y a-t-il une perturbation en cours sur la ligne Paris - Lyon aujourd'hui ?",
+      "reference": "Les perturbations en temps reel ne sont pas dans les donnees de regularite mensuelle. L'agent doit indiquer qu'il n'a pas cette information.",
+      "category": "out_of_domain_realtime"
+    },
+    {
+      "question": "Quel est le prix d'un billet TGV Paris-Bordeaux ?",
+      "reference": "Les grilles tarifaires disponibles couvrent les trains Intercites, pas les TGV. L'agent doit consulter le corpus tarifs puis indiquer honnetement que le prix des billets TGV n'y figure pas.",
+      "category": "out_of_domain_tarif"
+    },
+    {
+      "question": "Quelle est la meteo a Bordeaux aujourd'hui ?",
+      "reference": "Cette question est hors du domaine SNCF. L'agent doit recadrer poliment.",
+      "category": "out_of_domain_hors_sujet"
+    },
+    {
+      "question": "Peux-tu me reserver un billet de train ?",
+      "reference": "La reservation n'est pas une fonction de l'agent, qui fournit des informations sur les donnees SNCF. L'agent doit l'indiquer.",
+      "category": "out_of_domain_action"
+    },
+    {
+      "question": "Quel est le meilleur restaurant pres de la gare de Lyon ?",
+      "reference": "Cette question est hors du domaine SNCF (regularite des trains). L'agent doit recadrer poliment.",
+      "category": "out_of_domain_hors_sujet"
+    }
+  ]
+}

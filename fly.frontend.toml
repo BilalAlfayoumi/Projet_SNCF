@@ -1,0 +1,25 @@
+# Fly.io : frontend Streamlit de l'agent RAG SNCF.
+# Deploiement : fly deploy -c fly.frontend.toml
+# BACKEND_URL pointe vers l'app backend (reseau public Fly, HTTPS).
+
+app = "sncf-agent-frontend"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "Dockerfile.frontend"
+
+[env]
+  BACKEND_URL = "https://sncf-agent-backend.fly.dev"
+
+[http_service]
+  internal_port = 8501
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  # Frontend leger : pas de modele, juste Streamlit + httpx
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

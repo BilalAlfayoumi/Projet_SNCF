@@ -13,6 +13,7 @@ venv/
 .env.*
 !.env.example
 .claude/settings.local.json
+.logfire/
 
 # Donnees generees (corpus, checkpoints, index FAISS) : on garde les dossiers, pas le contenu
 data/raw/*
@@ -28,6 +29,12 @@ data/index/*
 .ipynb_checkpoints/
 .DS_Store
 
+# Artefacts d'evaluation (scores locaux, regeneres par make eval)
+eval/results/
+
 # Modeles telecharges (HuggingFace)
 .cache/
 CLAUDE.md
+# Outillage local Claude/agents (liens symboliques locaux)
+.agents/
+.claude/

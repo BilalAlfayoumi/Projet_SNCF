@@ -27,6 +27,10 @@ dependencies = [
     "pydantic-settings>=2.6",
     "python-dotenv>=1.0",
     "structlog>=24.4",
+    "langchain-ollama>=1.1.0",
+    "beautifulsoup4>=4.15.0",
+    "pypdf>=6.14.2",
+    "logfire[fastapi,system-metrics]>=4.38.0",
 ]
 
 [project.optional-dependencies]
@@ -47,6 +51,16 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.8",
 ]
+
+# torch CPU-only sur Linux (image Docker) : les roues PyPI par defaut embarquent les
+# libs CUDA (~5 Go) inutiles sur nos instances CPU. Sans effet sur macOS (dev local).
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [tool.ruff]
 line-length = 100
