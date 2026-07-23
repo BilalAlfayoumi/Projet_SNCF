@@ -22,6 +22,9 @@ dependencies = [
     # Vector store et embeddings (prototype local)
     "faiss-cpu>=1.9",
     "sentence-transformers>=3.3",
+    # torch declare explicitement : tool.uv.sources ne s'applique qu'aux dependances
+    # DIRECTES, et on doit forcer l'index CPU-only sur Linux (image Docker legere)
+    "torch>=2",
     # Ingestion et utilitaires
     "httpx>=0.28",
     "pydantic-settings>=2.6",
