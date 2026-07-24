@@ -10,12 +10,12 @@ possible via settings.llm_provider.
 from __future__ import annotations
 
 from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
 from langchain_core.tools import StructuredTool, tool
 from langgraph.graph.state import CompiledStateGraph
 
 from sncf_agent.config import settings
 from sncf_agent.ingestion.embedding import list_indexes
+from sncf_agent.rag.llm import get_chat_model
 from sncf_agent.rag.vectorstore import search_relevant
 
 # Registre des corpus connus : index FAISS -> (nom d'outil, description pour le routing).
@@ -140,19 +140,7 @@ def build_multi_agent(
     if not tools:
         raise RuntimeError("aucun index FAISS disponible : lancer les ingestions d'abord")
 
-    effective_provider = provider or settings.llm_provider
-    kwargs: dict = {"temperature": 0}
-    if effective_provider == "ollama":
-        kwargs["keep_alive"] = "2h"
-        kwargs["num_ctx"] = 6144
-        # Plafond de generation : borne la duree de redaction (~400 tokens suffisent
-        # pour une reponse factuelle concise), evite les redactions interminables.
-        kwargs["num_predict"] = 400
-    if api_key:
-        kwargs["api_key"] = api_key
-    llm = init_chat_model(
-        model or settings.llm_model, model_provider=effective_provider, **kwargs
-    )
+    llm = get_chat_model(provider=provider, model=model, api_key=api_key)
     return create_agent(llm, tools, system_prompt=MULTI_SYSTEM_PROMPT)
 
 
@@ -181,26 +169,7 @@ def build_agent(
     provider / model : override du LLM (defaut : config app, Groq). Permet d'evaluer
     l'agent avec un autre provider (ex. OpenAI) quand le quota Groq est atteint.
     """
-    # temperature=0 : reponses deterministes et factuelles, et limite les derapages de
-    # format d'appel d'outil des petits modeles locaux (tool call emis en texte brut).
-    effective_provider = provider or settings.llm_provider
-    kwargs: dict = {"temperature": 0}
-    if effective_provider == "ollama":
-        # keep_alive long : sans lui, Ollama decharge le modele apres ~5 min d'inactivite
-        # et chaque premiere question paie ~20-30 s de rechargement GPU.
-        kwargs["keep_alive"] = "2h"
-        # marge de contexte pour k passages de 1400 caracteres + l'historique
-        kwargs["num_ctx"] = 6144
-        # Plafond de generation : borne la duree de redaction (~400 tokens suffisent
-        # pour une reponse factuelle concise), evite les redactions interminables.
-        kwargs["num_predict"] = 400
-    if api_key:
-        kwargs["api_key"] = api_key
-    llm = init_chat_model(
-        model or settings.llm_model,
-        model_provider=effective_provider,
-        **kwargs,
-    )
+    llm = get_chat_model(provider=provider, model=model, api_key=api_key)
     retrieve_tool = make_retrieve_tool(index_name, k=k)
     return create_agent(llm, [retrieve_tool], system_prompt=SYSTEM_PROMPT)
 

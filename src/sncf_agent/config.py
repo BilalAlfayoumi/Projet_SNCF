@@ -100,6 +100,19 @@ class Settings(BaseSettings):
     def is_qdrant(self) -> bool:
         return self.vector_backend.lower() == "qdrant"
 
+    # --- Gateway LLM : Portkey ---
+    # S'applique au provider PAR DEFAUT (dev local + eval) : fallback entre providers,
+    # cache semantique, dashboard de couts. Le BYOK (cle du visiteur) reste en appel
+    # DIRECT, sa cle ne transite jamais par le compte Portkey (vie privee).
+    # Config Portkey (fallback Groq->OpenAI + cache) definie dans le dashboard, le code
+    # ne reference qu'un config_id.
+    portkey_api_key: str = Field(default="", alias="PORTKEY_API_KEY")
+    portkey_config: str = Field(default="", alias="PORTKEY_CONFIG")
+
+    @property
+    def portkey_active(self) -> bool:
+        return bool(self.portkey_api_key and self.portkey_config)
+
     # --- LLM d'evaluation (RAGAS) ---
     # L'eval est gourmande en tokens (juge appele plusieurs fois par question). On la
     # sort du provider de l'app : OpenAI (fiable, supporte n>1) plutot que Groq (quota
