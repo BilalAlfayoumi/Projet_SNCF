@@ -100,6 +100,18 @@ class Settings(BaseSettings):
     def is_qdrant(self) -> bool:
         return self.vector_backend.lower() == "qdrant"
 
+    # --- Reranking (cross-encodeur) ---
+    # Strategie retrieve-then-rerank : le bi-encodeur e5 ratisse large (rerank_fetch_k
+    # candidats), un cross-encodeur reordonne finement et on garde les k meilleurs.
+    # Togglable (RERANK_ENABLED) pour mesurer le gain a l'eval avant/apres. Modele leger
+    # multilingue par defaut (~470 Mo) : tient dans les 4 Go du backend a cote d'e5 ;
+    # basculer sur BAAI/bge-reranker-v2-m3 pour plus de qualite si la memoire le permet.
+    rerank_enabled: bool = Field(default=False, alias="RERANK_ENABLED")
+    rerank_model: str = Field(
+        default="cross-encoder/mmarco-mMiniLMv2-L12-H384-v1", alias="RERANK_MODEL"
+    )
+    rerank_fetch_k: int = 20  # candidats recuperes avant reranking (borne le cout CPU)
+
     # --- Gateway LLM : Portkey ---
     # S'applique au provider PAR DEFAUT (dev local + eval) : fallback entre providers,
     # cache semantique, dashboard de couts. Le BYOK (cle du visiteur) reste en appel

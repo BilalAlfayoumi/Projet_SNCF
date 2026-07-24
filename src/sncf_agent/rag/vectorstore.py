@@ -56,8 +56,20 @@ def search_relevant(
 ):
     """Recherche filtree par le seuil de pertinence du backend actif. Liste vide si rien
     n'est assez proche, ce qui permet a l'agent de refuser honnetement plutot que de
-    raisonner sur du hors-sujet."""
+    raisonner sur du hors-sujet.
+
+    Si le reranking est actif (settings.rerank_enabled) : on ratisse plus large
+    (rerank_fetch_k candidats), on filtre le hors-sujet par le seuil, puis un
+    cross-encodeur reordonne les survivants et on ne garde que les k meilleurs. Le
+    bi-encodeur assure le rappel, le cross-encodeur la precision.
+    """
     store = get_vectorstore(name, embeddings=embeddings)
+    if settings.rerank_enabled:
+        results = store.similarity_search_with_score(query, k=settings.rerank_fetch_k)
+        candidats = [doc for doc, score in results if est_pertinent(float(score))]
+        from sncf_agent.rag.rerank import rerank
+
+        return rerank(query, candidats, top_k=k)
     results = store.similarity_search_with_score(query, k=k)
     return [doc for doc, score in results if est_pertinent(float(score))]
 
