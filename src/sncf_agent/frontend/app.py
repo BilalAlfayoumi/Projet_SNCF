@@ -37,18 +37,29 @@ def fetch_indexes() -> list[str]:
         return []
 
 
-def wake_backend(timeout: float = 120.0) -> bool:
-    """Reveille le backend endormi (demo en scale-to-zero) et attend qu'il reponde.
+def wake_backend(budget: float = 160.0, on_progress=None) -> bool:
+    """Reveille le backend endormi (demo en scale-to-zero) par une boucle de retry.
 
-    La machine backend dort quand personne ne l'utilise (cout zero). Au premier acces,
-    le proxy Fly la demarre et TIENT la connexion pendant le boot (~1 min : demarrage
-    machine + imports). Une seule requete /health avec un timeout genereux suffit donc
-    a attendre le reveil, sans polling. Renvoie True si le backend a repondu.
+    La machine backend dort sans trafic (cout zero). Au 1er acces, Fly la demarre mais
+    le port n'est pret qu'apres ~50 s (imports langchain/langgraph). Pendant cette
+    fenetre, le proxy Fly abandonne et renvoie 502 : une seule requete ne suffit donc
+    PAS. On repoke /health toutes les quelques secondes jusqu'a ce que le port soit
+    bind (200), dans un budget total. La 1re requete declenche le demarrage, une requete
+    ulterieure tombe sur la machine prete. Renvoie True des que /health repond 200.
     """
-    try:
-        return httpx.get(f"{BACKEND_URL}/health", timeout=timeout).status_code == 200
-    except httpx.HTTPError:
-        return False
+    import time
+
+    deadline = time.time() + budget
+    while time.time() < deadline:
+        if on_progress:
+            on_progress(int(time.time() - (deadline - budget)))
+        try:
+            if httpx.get(f"{BACKEND_URL}/health", timeout=25.0).status_code == 200:
+                return True
+        except httpx.HTTPError:
+            pass  # 502/timeout pendant le boot : normal, on repoke
+        time.sleep(3)
+    return False
 
 
 def call_chat(
@@ -107,7 +118,11 @@ with st.sidebar:
             "pas utilisee, comptez ~1 min au premier acces)",
             expanded=True,
         ) as statut:
-            pret = wake_backend()
+            pret = wake_backend(
+                on_progress=lambda s: statut.update(
+                    label=f"Reveil du backend en cours... ({s}s / ~1 min)"
+                )
+            )
             statut.update(
                 label="Backend pret." if pret else "Backend injoignable.",
                 state="complete" if pret else "error",
