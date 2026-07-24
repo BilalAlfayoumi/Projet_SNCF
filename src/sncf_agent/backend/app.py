@@ -14,19 +14,24 @@ from __future__ import annotations
 
 import threading
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import logfire
 import structlog
 from fastapi import FastAPI, HTTPException
-from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
 from sncf_agent.config import settings
-from sncf_agent.ingestion.embedding import get_embeddings, list_indexes
-from sncf_agent.rag.agent import ask_with_contexts, build_agent, build_multi_agent
+
+# Imports LEGERS uniquement au niveau module : guardrails (regex) + config. Les modules
+# lourds (embedding, agent, vectorstore : ~7 s d'import chacun a cause de langchain/
+# langgraph) sont importes PARESSEUSEMENT dans les fonctions qui les utilisent. Sinon
+# uvicorn ne binde le port qu'apres ~50 s au demarrage sur petit CPU (le proxy Fly
+# abandonne alors et renvoie 502). Voir _warmup pour le prechargement en tache de fond.
 from sncf_agent.rag.guardrails import scan_input, verify_sources
-from sncf_agent.rag.vectorstore import search_with_scores
+
+if TYPE_CHECKING:  # annotations seulement (chaines grace a `from __future__`) : pas de cout runtime
+    from langgraph.graph.state import CompiledStateGraph
 
 log = structlog.get_logger(__name__)
 
@@ -41,6 +46,8 @@ _AGENTS: dict[tuple[str, int], CompiledStateGraph] = {}
 
 
 def _get_agent(index_name: str, k: int) -> CompiledStateGraph:
+    from sncf_agent.rag.agent import build_agent, build_multi_agent
+
     key = (index_name, k)
     if key not in _AGENTS:
         log.info("construction_agent", index=index_name, k=k)
@@ -52,13 +59,21 @@ def _get_agent(index_name: str, k: int) -> CompiledStateGraph:
 
 
 def _warmup() -> None:
-    """Charge et echauffe le modele d'embedding (1re inference torch ~140 s sur petit
-    CPU). Lance en TACHE DE FOND : ne DOIT PAS bloquer le demarrage, sinon uvicorn ne
-    bind pas le port et Fly considere la machine indisponible pendant tout l'echauffement.
+    """Precharge, en TACHE DE FOND, tout ce qui est lourd : les imports langchain/langgraph
+    (~7 s) et le modele d'embedding (1re inference torch ~140 s sur petit CPU). Lance dans
+    un thread daemon : ne DOIT PAS bloquer le demarrage, sinon uvicorn ne bind pas le port
+    et Fly considere la machine indisponible. Comme les modules lourds sont importes
+    paresseusement, ce prechargement evite que la 1re vraie requete paie le cout d'import.
     """
     import time
 
     try:
+        # Pre-import des modules lourds (le cout est paye ici, en fond, pas a la 1re requete).
+        log.info("prechargement_modules")
+        import sncf_agent.rag.agent  # noqa: F401
+        import sncf_agent.rag.vectorstore  # noqa: F401
+        from sncf_agent.ingestion.embedding import get_embeddings
+
         log.info("prechargement_embeddings")
         emb = get_embeddings()
         t0 = time.time()
@@ -77,8 +92,8 @@ def _warmup() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Echauffement en tache de fond : le lifespan retourne AUSSITOT, uvicorn bind le port,
-    # et /health repond tout de suite (il n'interroge que le vector store, pas le modele).
-    # Une requete arrivant avant la fin de l'echauffement chargera le modele a la volee.
+    # et /health repond tout de suite (il ne charge aucun module lourd). Une requete
+    # arrivant avant la fin de l'echauffement paiera l'import + le chargement du modele.
     threading.Thread(target=_warmup, name="warmup", daemon=True).start()
     log.info("backend_demarre")
     yield
@@ -141,17 +156,24 @@ class SearchResponse(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {"status": "ok", "indexes": list_indexes()}
+    # Volontairement trivial : ne charge AUCUN module lourd, pour repondre 200 des que le
+    # port est bind (la sonde Fly passe aussitot, sans attendre les imports langchain).
+    return {"status": "ok"}
 
 
 @app.get("/indexes")
 def indexes() -> dict[str, list[str]]:
+    from sncf_agent.ingestion.embedding import list_indexes
+
     return {"indexes": list_indexes()}
 
 
 @app.post("/search", response_model=SearchResponse)
 def search(req: SearchRequest) -> SearchResponse:
     """Retrieval brut avec scores, pour inspecter la qualite du retrieval."""
+    from sncf_agent.ingestion.embedding import list_indexes
+    from sncf_agent.rag.vectorstore import search_with_scores
+
     if req.index not in list_indexes():
         raise HTTPException(status_code=404, detail=f"index inconnu : {req.index}")
     hits = search_with_scores(req.index, req.query, k=req.k)
@@ -163,6 +185,9 @@ def search(req: SearchRequest) -> SearchResponse:
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest) -> ChatResponse:
     """Reponse de l'agent RAG (index precis, ou "multi" pour l'agent multi-corpus)."""
+    from sncf_agent.ingestion.embedding import list_indexes
+    from sncf_agent.rag.agent import ask_with_contexts, build_agent, build_multi_agent
+
     if req.index != MULTI_INDEX and req.index not in list_indexes():
         raise HTTPException(status_code=404, detail=f"index inconnu : {req.index}")
     # Guardrail d'entree : injection de prompt puis PII. Bloque AVANT le LLM (la donnee
