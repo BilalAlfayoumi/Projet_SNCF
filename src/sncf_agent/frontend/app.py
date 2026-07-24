@@ -30,11 +30,25 @@ st.set_page_config(page_title="Agent RAG SNCF", page_icon="🚆", layout="wide")
 @st.cache_data(ttl=30)
 def fetch_indexes() -> list[str]:
     try:
-        resp = httpx.get(f"{BACKEND_URL}/indexes", timeout=10.0)
+        resp = httpx.get(f"{BACKEND_URL}/indexes", timeout=15.0)
         resp.raise_for_status()
         return resp.json().get("indexes", [])
     except httpx.HTTPError:
         return []
+
+
+def wake_backend(timeout: float = 120.0) -> bool:
+    """Reveille le backend endormi (demo en scale-to-zero) et attend qu'il reponde.
+
+    La machine backend dort quand personne ne l'utilise (cout zero). Au premier acces,
+    le proxy Fly la demarre et TIENT la connexion pendant le boot (~1 min : demarrage
+    machine + imports). Une seule requete /health avec un timeout genereux suffit donc
+    a attendre le reveil, sans polling. Renvoie True si le backend a repondu.
+    """
+    try:
+        return httpx.get(f"{BACKEND_URL}/health", timeout=timeout).status_code == 200
+    except httpx.HTTPError:
+        return False
 
 
 def call_chat(
@@ -85,9 +99,26 @@ with st.sidebar:
     st.header("Reglages")
     indexes = fetch_indexes()
     if not indexes:
+        # Demo hebergee en scale-to-zero : au 1er acces la machine backend dort et met
+        # ~1 min a se reveiller. On patiente (le proxy Fly tient la connexion) au lieu
+        # d'echouer a 10 s comme avant. Le visiteur voit un statut clair, pas une erreur.
+        with st.status(
+            "Reveil du backend en cours... (demo eco : la machine dort quand elle n'est "
+            "pas utilisee, comptez ~1 min au premier acces)",
+            expanded=True,
+        ) as statut:
+            pret = wake_backend()
+            statut.update(
+                label="Backend pret." if pret else "Backend injoignable.",
+                state="complete" if pret else "error",
+            )
+        if pret:
+            fetch_indexes.clear()  # l'ancien resultat vide est en cache (ttl 30 s)
+            indexes = fetch_indexes()
+    if not indexes:
         st.error(
-            f"Backend injoignable ou aucun index.\nBackend attendu : {BACKEND_URL}\n"
-            "Lancer : uv run uvicorn sncf_agent.backend.app:app"
+            f"Backend injoignable.\nBackend attendu : {BACKEND_URL}\n"
+            "La machine met parfois ~1 min a demarrer : reessayez dans un instant."
         )
         st.stop()
     MULTI = "multi"
