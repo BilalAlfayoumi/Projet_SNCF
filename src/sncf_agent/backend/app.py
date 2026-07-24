@@ -13,6 +13,7 @@ cache par index, pour ne payer le cout qu'une fois.
 from __future__ import annotations
 
 import re
+import threading
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -63,34 +64,36 @@ def _get_agent(index_name: str, k: int) -> CompiledStateGraph:
     return _AGENTS[key]
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Precharge le modele d'embedding au demarrage pour que la 1re requete soit rapide.
-    log.info("prechargement_embeddings")
-    emb = get_embeddings()
-    # ECHAUFFEMENT : la premiere inference paie l'initialisation torch (mesure en prod :
-    # 143 s sur 2 vCPU partages !). On l'absorbe ici, pendant le boot, pour que la
-    # premiere vraie question de l'utilisateur soit deja rapide.
+def _warmup() -> None:
+    """Charge et echauffe le modele d'embedding (1re inference torch ~140 s sur petit
+    CPU). Lance en TACHE DE FOND : ne DOIT PAS bloquer le demarrage, sinon uvicorn ne
+    bind pas le port et Fly considere la machine indisponible pendant tout l'echauffement.
+    """
     import time
 
-    t0 = time.time()
-    emb.embed_query("echauffement du modele")
-    log.info("echauffement_embeddings_fini", duree_s=round(time.time() - t0, 1))
-    # Prechauffe aussi le LLM local : charge le modele en GPU des maintenant (sinon la
-    # premiere question paie le chargement, ~20-30 s avec Ollama).
-    if settings.llm_provider == "ollama":
-        try:
+    try:
+        log.info("prechargement_embeddings")
+        emb = get_embeddings()
+        t0 = time.time()
+        emb.embed_query("echauffement du modele")
+        log.info("echauffement_embeddings_fini", duree_s=round(time.time() - t0, 1))
+        if settings.llm_provider == "ollama":
             from langchain.chat_models import init_chat_model
 
-            log.info("prechauffage_llm", model=settings.llm_model)
-            init_chat_model(
-                settings.llm_model,
-                model_provider="ollama",
-                keep_alive="2h",
-            ).invoke("ok")
-        except Exception as exc:  # noqa: BLE001
-            log.warning("prechauffage_llm_echoue", error=str(exc)[:150])
-    log.info("backend_pret", indexes=list_indexes())
+            init_chat_model(settings.llm_model, model_provider="ollama", keep_alive="2h").invoke(
+                "ok"
+            )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("echauffement_echoue", error=str(exc)[:150])
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Echauffement en tache de fond : le lifespan retourne AUSSITOT, uvicorn bind le port,
+    # et /health repond tout de suite (il n'interroge que le vector store, pas le modele).
+    # Une requete arrivant avant la fin de l'echauffement chargera le modele a la volee.
+    threading.Thread(target=_warmup, name="warmup", daemon=True).start()
+    log.info("backend_demarre")
     yield
     _AGENTS.clear()
 
