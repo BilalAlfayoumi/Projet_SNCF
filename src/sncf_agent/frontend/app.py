@@ -30,11 +30,36 @@ st.set_page_config(page_title="Agent RAG SNCF", page_icon="🚆", layout="wide")
 @st.cache_data(ttl=30)
 def fetch_indexes() -> list[str]:
     try:
-        resp = httpx.get(f"{BACKEND_URL}/indexes", timeout=10.0)
+        resp = httpx.get(f"{BACKEND_URL}/indexes", timeout=15.0)
         resp.raise_for_status()
         return resp.json().get("indexes", [])
     except httpx.HTTPError:
         return []
+
+
+def wake_backend(budget: float = 160.0, on_progress=None) -> bool:
+    """Reveille le backend endormi (demo en scale-to-zero) par une boucle de retry.
+
+    La machine backend dort sans trafic (cout zero). Au 1er acces, Fly la demarre mais
+    le port n'est pret qu'apres ~50 s (imports langchain/langgraph). Pendant cette
+    fenetre, le proxy Fly abandonne et renvoie 502 : une seule requete ne suffit donc
+    PAS. On repoke /health toutes les quelques secondes jusqu'a ce que le port soit
+    bind (200), dans un budget total. La 1re requete declenche le demarrage, une requete
+    ulterieure tombe sur la machine prete. Renvoie True des que /health repond 200.
+    """
+    import time
+
+    deadline = time.time() + budget
+    while time.time() < deadline:
+        if on_progress:
+            on_progress(int(time.time() - (deadline - budget)))
+        try:
+            if httpx.get(f"{BACKEND_URL}/health", timeout=25.0).status_code == 200:
+                return True
+        except httpx.HTTPError:
+            pass  # 502/timeout pendant le boot : normal, on repoke
+        time.sleep(3)
+    return False
 
 
 def call_chat(
@@ -85,9 +110,30 @@ with st.sidebar:
     st.header("Reglages")
     indexes = fetch_indexes()
     if not indexes:
+        # Demo hebergee en scale-to-zero : au 1er acces la machine backend dort et met
+        # ~1 min a se reveiller. On patiente (le proxy Fly tient la connexion) au lieu
+        # d'echouer a 10 s comme avant. Le visiteur voit un statut clair, pas une erreur.
+        with st.status(
+            "Reveil du backend en cours... (demo eco : la machine dort quand elle n'est "
+            "pas utilisee, comptez ~1 min au premier acces)",
+            expanded=True,
+        ) as statut:
+            pret = wake_backend(
+                on_progress=lambda s: statut.update(
+                    label=f"Reveil du backend en cours... ({s}s / ~1 min)"
+                )
+            )
+            statut.update(
+                label="Backend pret." if pret else "Backend injoignable.",
+                state="complete" if pret else "error",
+            )
+        if pret:
+            fetch_indexes.clear()  # l'ancien resultat vide est en cache (ttl 30 s)
+            indexes = fetch_indexes()
+    if not indexes:
         st.error(
-            f"Backend injoignable ou aucun index.\nBackend attendu : {BACKEND_URL}\n"
-            "Lancer : uv run uvicorn sncf_agent.backend.app:app"
+            f"Backend injoignable.\nBackend attendu : {BACKEND_URL}\n"
+            "La machine met parfois ~1 min a demarrer : reessayez dans un instant."
         )
         st.stop()
     MULTI = "multi"
