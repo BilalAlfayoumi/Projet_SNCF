@@ -217,15 +217,18 @@ def ask(agent: CompiledStateGraph, question: str, history: list[dict] | None = N
     return result["messages"][-1].content
 
 
-def ask_with_contexts(agent: CompiledStateGraph, question: str) -> tuple[str, list[str]]:
+def ask_with_contexts(
+    agent: CompiledStateGraph, question: str, history: list[dict] | None = None
+) -> tuple[str, list[str]]:
     """Pose une question et renvoie (reponse, contextes REELLEMENT utilises par l'agent).
 
     Les contextes sont extraits des messages d'outil (ToolMessage) produits par l'agent,
     donc ce sont exactement les passages qu'il a vus, pas une recherche separee. C'est
-    indispensable pour une metrique de faithfulness juste. Si l'agent n'a appele aucun
-    outil (ex. question hors domaine qu'il decline), la liste est vide.
+    indispensable pour une metrique de faithfulness juste ET pour le guardrail de sortie
+    (verification des sources citees). Si l'agent n'a appele aucun outil (ex. question
+    hors domaine qu'il decline), la liste est vide.
     """
-    result = _invoke(agent, question)
+    result = _invoke(agent, question, history=history)
     if not result["messages"]:
         return _MSG_LIMITE_ITERATIONS, []
     messages = result["messages"]

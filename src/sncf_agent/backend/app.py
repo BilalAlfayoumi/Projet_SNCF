@@ -12,7 +12,6 @@ cache par index, pour ne payer le cout qu'une fois.
 
 from __future__ import annotations
 
-import re
 import threading
 from contextlib import asynccontextmanager
 from typing import Any
@@ -25,7 +24,8 @@ from pydantic import BaseModel, Field
 
 from sncf_agent.config import settings
 from sncf_agent.ingestion.embedding import get_embeddings, list_indexes
-from sncf_agent.rag.agent import ask, build_agent, build_multi_agent
+from sncf_agent.rag.agent import ask_with_contexts, build_agent, build_multi_agent
+from sncf_agent.rag.guardrails import scan_input, verify_sources
 from sncf_agent.rag.vectorstore import search_with_scores
 
 log = structlog.get_logger(__name__)
@@ -33,21 +33,8 @@ log = structlog.get_logger(__name__)
 # Valeur speciale d'index : agent multi-corpus (route seul vers le bon corpus).
 MULTI_INDEX = "multi"
 
-# Guardrail d'entree (prototype, regles simples comme prevu au plan ; le gateway LLM
-# prendra le relais en version scalable) : motifs d'injection de prompt courants.
-_INJECTION_RE = re.compile(
-    r"(ignore\s+(les|tes|toutes)\s+.{0,20}instructions"
-    r"|oublie\s+(les|tes)\s+.{0,20}instructions"
-    r"|system\s*prompt|prompt\s*syst[eè]me"
-    r"|tu\s+es\s+maintenant\s+"
-    r"|reveal\s+your\s+instructions)",
-    re.IGNORECASE,
-)
-
-_REPONSE_GUARDRAIL = (
-    "Je ne peux pas traiter cette demande. Posez-moi une question sur les donnees "
-    "SNCF : regularite des TGV, tarifs Intercites ou abonnement MAX JEUNE."
-)
+# Guardrails d'entree (injection + PII) et de sortie (verification des sources citees) :
+# regroupes dans rag/guardrails.py (regles deterministes, testables).
 
 # Cache des agents construits, par (index, k). Evite de reconstruire a chaque requete.
 _AGENTS: dict[tuple[str, int], CompiledStateGraph] = {}
@@ -178,10 +165,16 @@ def chat(req: ChatRequest) -> ChatResponse:
     """Reponse de l'agent RAG (index precis, ou "multi" pour l'agent multi-corpus)."""
     if req.index != MULTI_INDEX and req.index not in list_indexes():
         raise HTTPException(status_code=404, detail=f"index inconnu : {req.index}")
-    # Guardrail d'entree : motifs d'injection de prompt -> message de repli clair.
-    if _INJECTION_RE.search(req.question):
-        log.warning("guardrail_injection_detecte", question=req.question[:80])
-        return ChatResponse(answer=_REPONSE_GUARDRAIL)
+    # Guardrail d'entree : injection de prompt puis PII. Bloque AVANT le LLM (la donnee
+    # personnelle ne doit ni etre envoyee a un provider externe, ni etre loguee).
+    verdict = scan_input(req.question)
+    if verdict.blocked:
+        if verdict.reason == "pii":
+            # On loggue les TYPES detectes, jamais la question ni la valeur.
+            log.warning("guardrail_pii_detecte", types=verdict.pii_types)
+        else:
+            log.warning("guardrail_injection_detecte", question=req.question[:80])
+        return ChatResponse(answer=verdict.message)
 
     if req.api_key:
         # Mode BYOK : agent construit a la volee avec la cle du visiteur, PAS de cache
@@ -218,7 +211,9 @@ def chat(req: ChatRequest) -> ChatResponse:
         agent = _get_agent(req.index, req.k)
     historique = [{"role": m.role, "content": m.content} for m in req.history]
     try:
-        answer = ask(agent, req.question, history=historique)
+        # ask_with_contexts (et non ask) : on recupere aussi les passages vus par l'agent,
+        # pour le guardrail de sortie (verification des sources citees).
+        answer, contexts = ask_with_contexts(agent, req.question, history=historique)
     except Exception as exc:  # noqa: BLE001
         msg = str(exc)
         # Cle API invalide (mode BYOK notamment) : erreur explicite pour l'utilisateur.
@@ -240,4 +235,15 @@ def chat(req: ChatRequest) -> ChatResponse:
             ) from exc
         log.error("erreur_agent", error=msg[:300])
         raise HTTPException(status_code=500, detail=f"Erreur de l'agent : {msg[:200]}") from exc
+
+    # Guardrail de sortie : une URL citee absente des passages recuperes est une citation
+    # non ancree (potentiellement inventee). On le signale a l'utilisateur en toute
+    # transparence plutot que de la laisser passer.
+    controle = verify_sources(answer, contexts)
+    if not controle.ok:
+        log.warning("guardrail_source_non_verifiee", urls=controle.unsupported)
+        answer += (
+            "\n\n_(Note : une ou plusieurs sources citees n'ont pas pu etre verifiees "
+            "dans la base documentaire ; verifiez-les avant de vous y fier.)_"
+        )
     return ChatResponse(answer=answer)
