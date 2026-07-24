@@ -9,6 +9,7 @@ FAISS reste natif LangChain (reutilisable tel quel par le retriever de l'agent).
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import structlog
@@ -65,17 +66,21 @@ class E5Embeddings(Embeddings):
 
 
 _EMBEDDINGS: E5Embeddings | None = None
+_EMBEDDINGS_LOCK = threading.Lock()
 
 
 def get_embeddings() -> E5Embeddings:
     """Renvoie une instance partagee d'embeddings (chargee une seule fois).
 
-    Le modele e5 pese ~2 Go : le backend doit le charger une fois et le reutiliser
-    pour toutes les requetes (agent + inspection retrieval), pas a chaque appel.
+    Le modele e5 pese ~2 Go : le backend le charge une fois et le reutilise pour toutes
+    les requetes. Thread-safe : le thread d'echauffement (au boot) et une requete
+    concurrente ne doivent pas charger deux instances (double conso memoire).
     """
     global _EMBEDDINGS
     if _EMBEDDINGS is None:
-        _EMBEDDINGS = E5Embeddings()
+        with _EMBEDDINGS_LOCK:
+            if _EMBEDDINGS is None:  # double-check apres acquisition du verrou
+                _EMBEDDINGS = E5Embeddings()
     return _EMBEDDINGS
 
 
