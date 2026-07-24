@@ -36,6 +36,7 @@ dependencies = [
     "logfire[fastapi,system-metrics]>=4.38.0",
     "langchain-qdrant>=1.1.0",
     "qdrant-client>=1.18.0",
+    "portkey-ai>=2.3.2",
 ]
 
 [project.optional-dependencies]
