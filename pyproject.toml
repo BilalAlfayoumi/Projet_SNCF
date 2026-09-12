@@ -37,6 +37,7 @@ dependencies = [
     "langchain-qdrant>=1.1.0",
     "qdrant-client>=1.18.0",
     "portkey-ai>=2.3.2",
+    "mcp>=2.2.0",
 ]
 
 [project.optional-dependencies]

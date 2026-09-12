@@ -137,6 +137,11 @@ class Settings(BaseSettings):
     api_port: int = 8000
     backend_url: str = Field(default="http://127.0.0.1:8000", alias="BACKEND_URL")
 
+    # --- Serveur MCP (acces outillage agent, en plus de l'API REST) ---
+    # Port distinct de api_port : les deux serveurs (REST et MCP) peuvent tourner
+    # simultanement sur la meme machine.
+    mcp_port: int = Field(default=8100, alias="MCP_PORT")
+
     # --- Observabilite (LangSmith) ---
     langsmith_tracing: bool = Field(default=False, alias="LANGSMITH_TRACING")
     langsmith_api_key: str = Field(default="", alias="LANGSMITH_API_KEY")

@@ -116,7 +116,8 @@ uv sync --extra scale        # + Qdrant / Redis / Portkey
 Variables d'environnement principales (toutes optionnelles selon l'usage) :
 `OPENDATA_API_KEY` (relève le quota data.sncf.com), `GROQ_API_KEY` / `OPENAI_API_KEY`,
 `VECTOR_BACKEND` (`faiss`|`qdrant`), `QDRANT_CLUSTER_ENDPOINT` / `QDRANT_API_KEY`,
-`PORTKEY_API_KEY` / `PORTKEY_CONFIG`, `LANGSMITH_*`, `RERANK_ENABLED`.
+`PORTKEY_API_KEY` / `PORTKEY_CONFIG`, `LANGSMITH_*`, `RERANK_ENABLED`, `MCP_PORT`
+(serveur MCP, défaut `8100`).
 
 ## Commandes
 
@@ -128,6 +129,9 @@ uv run python -m sncf_agent.ingestion.pipeline <dataset_id> --where "<clause ODS
 uv run uvicorn sncf_agent.backend.app:app --host 127.0.0.1 --port 8000
 uv run streamlit run src/sncf_agent/frontend/app.py
 
+# Serveur MCP (mêmes fonctions RAG et guardrails que l'API REST, exposées en outils)
+uv run python -m sncf_agent.mcp_server
+
 # Éval, tests, lint
 uv run python -m eval.harness --label baseline
 uv run pytest
@@ -135,6 +139,23 @@ uv run ruff check .
 ```
 
 Un `Makefile` regroupe ces cibles (`make help`).
+
+### Points d'entrée
+
+| Point d'entrée | Commande | Rôle |
+|---|---|---|
+| API REST (FastAPI) | `make backend` | `/chat`, `/search`, `/indexes`, `/health` |
+| Frontend (Streamlit) | `make front` | Interface web (chat + inspection retrieval) |
+| **Serveur MCP** | `make mcp` | Outils `search_sncf_corpus` / `ask_sncf_agent` pour un client MCP (agent, IDE...), en Streamable HTTP sur `http://127.0.0.1:8100/mcp` |
+| Ingestion | `make ingest` / `make ingest-docs` | Pipelines de données |
+| Évaluation | `make eval` | RAGAS sur le golden set |
+
+Le serveur MCP (`src/sncf_agent/mcp_server.py`) est un mode d'accès **additif** à l'agent,
+en complément de l'API REST (aucun des deux ne remplace l'autre, ils peuvent tourner en
+parallèle). Il réutilise directement les mêmes fonctions RAG et les mêmes guardrails
+d'entrée/sortie que `/chat` et `/search` — pas de logique dupliquée. Utile pour brancher
+l'agent sur un client compatible MCP (IDE, autre agent) sans passer par HTTP + JSON du
+REST classique.
 
 ---
 
@@ -147,6 +168,7 @@ src/sncf_agent/
   rag/               agent LangGraph, vector store, llm (Portkey), rerank, guardrails
   backend/           API FastAPI
   frontend/          interface Streamlit
+  mcp_server.py      serveur MCP (mêmes fonctions RAG et guardrails, exposées en outils)
 eval/                golden set + évaluation RAGAS
 tests/               tests unitaires
 ```
