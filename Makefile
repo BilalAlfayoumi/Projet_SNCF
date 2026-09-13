@@ -9,7 +9,7 @@ LABEL   ?= run
 LIMIT   ?=
 K       ?=
 
-.PHONY: help install lint test ingest ingest-checkpoint ingest-no-embed backend front eval eval-smoke
+.PHONY: help install lint test ingest ingest-checkpoint ingest-no-embed backend front mcp eval eval-smoke
 
 help:  ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -40,6 +40,9 @@ backend:  ## Lance l'API FastAPI sur http://127.0.0.1:8000 (charge le modele, ~1
 
 front:  ## Lance le frontend Streamlit sur http://127.0.0.1:8501
 	uv run streamlit run src/sncf_agent/frontend/app.py
+
+mcp:  ## Lance le serveur MCP (outils search_sncf_corpus / ask_sncf_agent) sur http://127.0.0.1:8100/mcp
+	uv run python -m sncf_agent.mcp_server
 
 eval:  ## Eval RAGAS complete du golden set (LABEL=nom, K=passages, LIMIT=nb questions)
 	uv run python -m eval.harness --label $(LABEL) $(if $(LIMIT),--limit $(LIMIT)) $(if $(K),--k $(K))
